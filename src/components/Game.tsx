@@ -1119,8 +1119,8 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   // Only zoning tools show the grid/rectangle selection visualization
   const showsDragGrid = ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone'].includes(selectedTool);
   
-  // Roads and other tools support drag-to-place but don't show the grid
-  const supportsDragPlace = selectedTool !== 'select' && selectedTool !== 'bulldoze';
+  // Roads, bulldoze, and other tools support drag-to-place but don't show the grid
+  const supportsDragPlace = selectedTool !== 'select';
   
   useEffect(() => {
     worldStateRef.current.grid = grid;
@@ -1268,25 +1268,28 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       ctx.translate(carX, carY);
       ctx.rotate(meta.angle);
       
+      // Scale down by 30% (multiply by 0.7)
+      const scale = 0.7;
+      
       ctx.fillStyle = car.color;
       ctx.beginPath();
-      ctx.moveTo(-10, -5);
-      ctx.lineTo(10, -5);
-      ctx.lineTo(12, 0);
-      ctx.lineTo(10, 5);
-      ctx.lineTo(-10, 5);
+      ctx.moveTo(-10 * scale, -5 * scale);
+      ctx.lineTo(10 * scale, -5 * scale);
+      ctx.lineTo(12 * scale, 0);
+      ctx.lineTo(10 * scale, 5 * scale);
+      ctx.lineTo(-10 * scale, 5 * scale);
       ctx.closePath();
       ctx.fill();
       
       ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillRect(-4, -2.8, 7, 5.6);
+      ctx.fillRect(-4 * scale, -2.8 * scale, 7 * scale, 5.6 * scale);
       
       ctx.fillStyle = '#111827';
-      ctx.fillRect(-10, -4, 2.4, 8);
+      ctx.fillRect(-10 * scale, -4 * scale, 2.4 * scale, 8 * scale);
       
       ctx.fillStyle = 'rgba(255, 255, 199, 0.8)';
-      ctx.fillRect(9.6, -2, 2.4, 1.6);
-      ctx.fillRect(9.6, 0.4, 2.4, 1.6);
+      ctx.fillRect(9.6 * scale, -2 * scale, 2.4 * scale, 1.6 * scale);
+      ctx.fillRect(9.6 * scale, 0.4 * scale, 2.4 * scale, 1.6 * scale);
       
       ctx.restore();
     });
@@ -1833,7 +1836,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       else if (buildingType === 'university') sizeMultiplier = 2.8;
       else if (buildingType === 'hospital') sizeMultiplier = 2.25; // 2x2 building
       else if (buildingType === 'school') sizeMultiplier = 2.25; // 2x2 building
-      else if (buildingType === 'fire_station') sizeMultiplier = 1.35; // Scaled down 25% from 1.8
+      else if (buildingType === 'fire_station') sizeMultiplier = 1.215; // Scaled down 10% from 1.35
       else if (buildingType === 'police_station') sizeMultiplier = 1.35; // Scaled down 25% from 1.8
       else if (buildingType === 'park') sizeMultiplier = 1.134; // Scaled down 40% total (30% + 10%) from 1.8
     }
@@ -1925,14 +1928,11 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
             setDragEndTile({ x: gridX, y: gridY });
             setIsDragging(true);
           } else if (supportsDragPlace) {
-            // For roads and other tools, start drag-to-place
+            // For roads, bulldoze, and other tools, start drag-to-place
             setDragStartTile({ x: gridX, y: gridY });
             setDragEndTile({ x: gridX, y: gridY });
             setIsDragging(true);
             // Place immediately on first click
-            placeAtTile(gridX, gridY);
-          } else {
-            // Single placement for bulldoze
             placeAtTile(gridX, gridY);
           }
         }
