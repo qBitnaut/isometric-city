@@ -30,7 +30,7 @@ import {
   BudgetIcon,
   SettingsIcon,
 } from './ui/Icons';
-import { USE_TILE_RENDERER, SPRITE_SHEET, getSpriteCoords, BUILDING_TO_SPRITE, SPRITE_VERTICAL_OFFSETS, SPRITE_ORDER } from '@/lib/renderConfig';
+import { USE_TILE_RENDERER, SPRITE_SHEET, getSpriteCoords, BUILDING_TO_SPRITE, SPRITE_VERTICAL_OFFSETS, SPRITE_HORIZONTAL_OFFSETS, SPRITE_ORDER } from '@/lib/renderConfig';
 
 // Import shadcn components
 import { Button } from '@/components/ui/button';
@@ -1061,10 +1061,10 @@ function SettingsPanel() {
   );
 }
 
-// Background color to filter (RGB: 219, 218, 223)
-const BACKGROUND_COLOR = { r: 219, g: 218, b: 223 };
+// Background color to filter
+const BACKGROUND_COLOR = { r: 255, g: 0, b: 0 };
 // Color distance threshold - pixels within this distance will be made transparent
-const COLOR_THRESHOLD = 10; // Adjust this value to be more/less aggressive
+const COLOR_THRESHOLD = 100; // Adjust this value to be more/less aggressive (increased from 10 for better filtering)
 
 /**
  * Filters colors close to the background color from an image, making them transparent
@@ -1075,6 +1075,12 @@ const COLOR_THRESHOLD = 10; // Adjust this value to be more/less aggressive
 function filterBackgroundColor(img: HTMLImageElement, threshold: number = COLOR_THRESHOLD): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     try {
+      console.log('Starting background color filtering...', { 
+        imageSize: `${img.naturalWidth || img.width}x${img.naturalHeight || img.height}`,
+        threshold,
+        backgroundColor: BACKGROUND_COLOR
+      });
+      
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
@@ -1092,7 +1098,10 @@ function filterBackgroundColor(img: HTMLImageElement, threshold: number = COLOR_
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
       
+      console.log(`Processing ${data.length / 4} pixels...`);
+      
       // Process each pixel
+      let filteredCount = 0;
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i];
         const g = data[i + 1];
@@ -1108,16 +1117,28 @@ function filterBackgroundColor(img: HTMLImageElement, threshold: number = COLOR_
         // If the color is close to the background color, make it transparent
         if (distance <= threshold) {
           data[i + 3] = 0; // Set alpha to 0 (transparent)
+          filteredCount++;
         }
       }
+      
+      // Debug: log filtering results
+      const totalPixels = data.length / 4;
+      const percentage = filteredCount > 0 ? ((filteredCount / totalPixels) * 100).toFixed(2) : '0.00';
+      console.log(`Filtered ${filteredCount} pixels (${percentage}%) from sprite sheet`);
       
       // Put the modified image data back
       ctx.putImageData(imageData, 0, 0);
       
       // Create a new image from the processed canvas
       const filteredImg = new Image();
-      filteredImg.onload = () => resolve(filteredImg);
-      filteredImg.onerror = () => reject(new Error('Failed to create filtered image'));
+      filteredImg.onload = () => {
+        console.log('Filtered image created successfully');
+        resolve(filteredImg);
+      };
+      filteredImg.onerror = (error) => {
+        console.error('Failed to create filtered image:', error);
+        reject(new Error('Failed to create filtered image'));
+      };
       filteredImg.src = canvas.toDataURL();
     } catch (error) {
       reject(error);
@@ -1252,9 +1273,10 @@ function SpriteTestPanel({ onClose }: { onClose: () => void }) {
         const drawX = baseX - destWidth / 2;
         const drawY = baseY + tileH / 2 - destHeight + destHeight * 0.15;
         
-        // Draw sprite
+        // Draw sprite (using filtered version if available)
+        const filteredSpriteSheet = imageCache.get(`${SPRITE_SHEET.src}_filtered`) || spriteSheet;
         ctx.drawImage(
-          spriteSheet,
+          filteredSpriteSheet,
           coords.sx, coords.sy, coords.sw, coords.sh,
           Math.round(drawX), Math.round(drawY),
           Math.round(destWidth), Math.round(destHeight)
@@ -1680,10 +1702,9 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
           
           const buildingType = tile.building.type;
           
-          // Skip roads, grass, empty, water, trees, and zones (these don't hide cars)
-          if (buildingType === 'road' || buildingType === 'grass' || buildingType === 'empty' || 
-              buildingType === 'water' || buildingType === 'tree' ||
-              buildingType === 'residential' || buildingType === 'commercial' || buildingType === 'industrial') {
+          // Skip roads, grass, empty, water, and trees (these don't hide cars)
+          const skipTypes: BuildingType[] = ['road', 'grass', 'empty', 'water', 'tree'];
+          if (skipTypes.includes(buildingType)) {
             continue;
           }
           
@@ -1753,8 +1774,8 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   // Load all building images on mount
   useEffect(() => {
     if (USE_TILE_RENDERER) {
-      // Load only the sprite sheet
-      loadImage(SPRITE_SHEET.src)
+      // Load only the sprite sheet with background color filtering
+      loadSpriteImage(SPRITE_SHEET.src, true)
         .then(() => setImagesLoaded(true))
         .catch(console.error);
     } else {
@@ -2451,12 +2472,13 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     if (hasTileSprite) {
       // ===== TILE RENDERER PATH =====
       // Handles both single-tile and multi-tile buildings
-      const spriteSheet = imageCache.get(SPRITE_SHEET.src);
+      // Get the filtered sprite sheet from cache (or fallback to unfiltered if not available)
+      const filteredSpriteSheet = imageCache.get(`${SPRITE_SHEET.src}_filtered`) || imageCache.get(SPRITE_SHEET.src);
       
-      if (spriteSheet) {
+      if (filteredSpriteSheet) {
         // Use naturalWidth/naturalHeight for accurate source dimensions
-        const sheetWidth = spriteSheet.naturalWidth || spriteSheet.width;
-        const sheetHeight = spriteSheet.naturalHeight || spriteSheet.height;
+        const sheetWidth = filteredSpriteSheet.naturalWidth || filteredSpriteSheet.width;
+        const sheetHeight = filteredSpriteSheet.naturalHeight || filteredSpriteSheet.height;
         
         // getSpriteCoords handles building type to sprite key mapping
         const coords = getSpriteCoords(buildingType, sheetWidth, sheetHeight);
@@ -2486,9 +2508,9 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
           // Scale factor: 1.2 base (reduced from 1.5 for ~20% smaller)
           // Multi-tile buildings scale with their footprint
           let scaleMultiplier = isMultiTile ? Math.max(buildingSize.width, buildingSize.height) : 1;
-          // Special scale adjustment for airport to match museum's visual scale
+          // Special scale adjustment for airport (scaled up 15% from previous)
           if (buildingType === 'airport') {
-            scaleMultiplier *= 0.75; // Scale down to match museum's 3x3 visual appearance
+            scaleMultiplier *= 0.8625; // 0.75 * 1.15 = 0.8625 (15% larger than before)
           }
           const destWidth = w * 1.2 * scaleMultiplier;
           const aspectRatio = coords.sh / coords.sw;  // height/width ratio of source
@@ -2519,7 +2541,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
           
           // Draw the sprite with correct aspect ratio
           ctx.drawImage(
-            spriteSheet,
+            filteredSpriteSheet,
             coords.sx, coords.sy, coords.sw, coords.sh,  // Source: exact tile from sprite sheet
             Math.round(drawX), Math.round(drawY),        // Destination position
             Math.round(destWidth), Math.round(destHeight) // Destination size (preserving aspect ratio)

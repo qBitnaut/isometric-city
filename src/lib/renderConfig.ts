@@ -5,7 +5,7 @@ export const USE_TILE_RENDERER = true;
 // Sprite sheet configuration
 export const SPRITE_SHEET = {
   // Path to the sprite sheet
-  src: '/assets/sprites4.png',
+  src: '/assets/sprites_red.png',
   // Number of columns in the sprite sheet (5 columns confirmed)
   cols: 5,
   // Number of rows - using 6 because: 5 main rows + partial 6th row means
@@ -91,7 +91,19 @@ export const SPRITE_VERTICAL_OFFSETS: Record<string, number> = {
   school: 0.20,         // School - push down ~20%
   tennis: 0.10,         // Tennis court - push down ~10%
   water_tower: -0.30,   // Water tower - push up ~12px
-  airport: -1.2,       // Airport - push up significantly
+  airport: -0.8,        // Airport - shifted down further
+  // Add more as needed
+};
+
+// ============================================================================
+// SPRITE HORIZONTAL OFFSET ADJUSTMENTS
+// ============================================================================
+// Fine-tune horizontal positioning for individual sprites.
+// Positive values push the sprite RIGHT, negative values push it LEFT.
+// Values are multiplied by tile width (TILE_WIDTH) for consistent scaling.
+// ============================================================================
+export const SPRITE_HORIZONTAL_OFFSETS: Record<string, number> = {
+  university: -0.6,     // University - shift left significantly
   // Add more as needed
 };
 
