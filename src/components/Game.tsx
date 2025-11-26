@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useGame } from '@/context/GameContext';
-import { Tool, TOOL_INFO, Tile } from '@/types/game';
+import { Tool, TOOL_INFO, Tile, BuildingType } from '@/types/game';
 import { getBuildingSize } from '@/lib/simulation';
 import {
   PlayIcon,
@@ -1089,7 +1089,9 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   setSelectedTile: (tile: { x: number; y: number } | null) => void;
 }) {
   const { state, placeAtTile } = useGame();
+  const { grid, gridSize, selectedTool } = state;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const carsCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [offset, setOffset] = useState({ x: 620, y: 160 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1097,13 +1099,20 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const carsRef = useRef<Car[]>([]);
+  const carIdRef = useRef(0);
+  const carSpawnTimerRef = useRef(0);
+  const worldStateRef = useRef<WorldRenderState>({
+    grid,
+    gridSize,
+    offset,
+    zoom,
+  });
   const [lastPlacedTile, setLastPlacedTile] = useState<{ x: number; y: number } | null>(null);
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 1200, height: 800 });
   const [dragStartTile, setDragStartTile] = useState<{ x: number; y: number } | null>(null);
   const [dragEndTile, setDragEndTile] = useState<{ x: number; y: number } | null>(null);
-  
-  const { grid, gridSize, selectedTool } = state;
 
   // Only zoning tools show the grid/rectangle selection visualization
   const showsDragGrid = ['zone_residential', 'zone_commercial', 'zone_industrial', 'zone_dezone'].includes(selectedTool);
@@ -1111,6 +1120,171 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
   // Roads and other tools support drag-to-place but don't show the grid
   const supportsDragPlace = selectedTool !== 'select' && selectedTool !== 'bulldoze';
   
+  useEffect(() => {
+    worldStateRef.current.grid = grid;
+    worldStateRef.current.gridSize = gridSize;
+  }, [grid, gridSize]);
+
+  useEffect(() => {
+    worldStateRef.current.offset = offset;
+  }, [offset]);
+
+  useEffect(() => {
+    worldStateRef.current.zoom = zoom;
+  }, [zoom]);
+
+  const spawnRandomCar = useCallback(() => {
+    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    if (!currentGrid || currentGridSize <= 0) return false;
+    
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const tileX = Math.floor(Math.random() * currentGridSize);
+      const tileY = Math.floor(Math.random() * currentGridSize);
+      if (!isRoadTile(currentGrid, currentGridSize, tileX, tileY)) continue;
+      
+      const options = getDirectionOptions(currentGrid, currentGridSize, tileX, tileY);
+      if (options.length === 0) continue;
+      
+      const direction = options[Math.floor(Math.random() * options.length)];
+      carsRef.current.push({
+        id: carIdRef.current++,
+        tileX,
+        tileY,
+        direction,
+        progress: Math.random() * 0.8,
+        speed: 0.35 + Math.random() * 0.35,
+        age: 0,
+        maxAge: 12 + Math.random() * 18,
+        color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)],
+        laneOffset: (Math.random() - 0.5) * 6,
+      });
+      return true;
+    }
+    
+    return false;
+  }, []);
+
+  const updateCars = useCallback((delta: number) => {
+    const { grid: currentGrid, gridSize: currentGridSize } = worldStateRef.current;
+    if (!currentGrid || currentGridSize <= 0) {
+      carsRef.current = [];
+      return;
+    }
+    
+    const maxCars = Math.min(40, Math.max(4, Math.floor(currentGridSize / 2)));
+    carSpawnTimerRef.current -= delta;
+    if (carsRef.current.length < maxCars && carSpawnTimerRef.current <= 0) {
+      if (spawnRandomCar()) {
+        carSpawnTimerRef.current = 0.9 + Math.random() * 1.3;
+      } else {
+        carSpawnTimerRef.current = 0.5;
+      }
+    }
+    
+    const updatedCars: Car[] = [];
+    for (const car of carsRef.current) {
+      let alive = true;
+      
+      car.age += delta;
+      if (car.age > car.maxAge) {
+        continue;
+      }
+      
+      if (!isRoadTile(currentGrid, currentGridSize, car.tileX, car.tileY)) {
+        continue;
+      }
+      
+      car.progress += car.speed * delta;
+      let guard = 0;
+      while (car.progress >= 1 && guard < 4) {
+        guard++;
+        const meta = DIRECTION_META[car.direction];
+        car.tileX += meta.step.x;
+        car.tileY += meta.step.y;
+        
+        if (!isRoadTile(currentGrid, currentGridSize, car.tileX, car.tileY)) {
+          alive = false;
+          break;
+        }
+        
+        car.progress -= 1;
+        const nextDirection = pickNextDirection(car.direction, currentGrid, currentGridSize, car.tileX, car.tileY);
+        if (!nextDirection) {
+          alive = false;
+          break;
+        }
+        car.direction = nextDirection;
+      }
+      
+      if (alive) {
+        updatedCars.push(car);
+      }
+    }
+    
+    carsRef.current = updatedCars;
+  }, [spawnRandomCar]);
+
+  const drawCars = useCallback((ctx: CanvasRenderingContext2D) => {
+    const { offset: currentOffset, zoom: currentZoom } = worldStateRef.current;
+    const canvas = ctx.canvas;
+    const dpr = window.devicePixelRatio || 1;
+    
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.scale(dpr * currentZoom, dpr * currentZoom);
+    ctx.translate(currentOffset.x / currentZoom, currentOffset.y / currentZoom);
+    
+    const viewWidth = canvas.width / (dpr * currentZoom);
+    const viewHeight = canvas.height / (dpr * currentZoom);
+    const viewLeft = -currentOffset.x / currentZoom - TILE_WIDTH;
+    const viewTop = -currentOffset.y / currentZoom - TILE_HEIGHT * 2;
+    const viewRight = viewWidth - currentOffset.x / currentZoom + TILE_WIDTH;
+    const viewBottom = viewHeight - currentOffset.y / currentZoom + TILE_HEIGHT * 2;
+    
+    carsRef.current.forEach(car => {
+      const { screenX, screenY } = gridToScreen(car.tileX, car.tileY, 0, 0);
+      const centerX = screenX + TILE_WIDTH / 2;
+      const centerY = screenY + TILE_HEIGHT / 2;
+      const meta = DIRECTION_META[car.direction];
+      const carX = centerX + meta.vec.dx * car.progress + meta.normal.nx * car.laneOffset;
+      const carY = centerY + meta.vec.dy * car.progress + meta.normal.ny * car.laneOffset;
+      
+      if (carX < viewLeft - 40 || carX > viewRight + 40 || carY < viewTop - 60 || carY > viewBottom + 60) {
+        return;
+      }
+      
+      ctx.save();
+      ctx.translate(carX, carY);
+      ctx.rotate(meta.angle);
+      
+      ctx.fillStyle = car.color;
+      ctx.beginPath();
+      ctx.moveTo(-5, -2.5);
+      ctx.lineTo(5, -2.5);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(5, 2.5);
+      ctx.lineTo(-5, 2.5);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillRect(-2, -1.4, 3.5, 2.8);
+      
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(-5, -2, 1.2, 4);
+      
+      ctx.fillStyle = 'rgba(255, 255, 199, 0.8)';
+      ctx.fillRect(4.8, -1, 1.2, 0.8);
+      ctx.fillRect(4.8, 0.2, 1.2, 0.8);
+      
+      ctx.restore();
+    });
+    
+    ctx.restore();
+  }, []);
+
   // Load all building images on mount
   useEffect(() => {
     Promise.all(Object.values(BUILDING_IMAGES).map(src => loadImage(src)))
@@ -1128,6 +1302,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         // Set display size
         canvasRef.current.style.width = `${rect.width}px`;
         canvasRef.current.style.height = `${rect.height}px`;
+        if (carsCanvasRef.current) {
+          carsCanvasRef.current.style.width = `${rect.width}px`;
+          carsCanvasRef.current.style.height = `${rect.height}px`;
+        }
         
         // Set actual size in memory (scaled for DPI)
         setCanvasSize({
@@ -1258,6 +1436,32 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     ctx.restore();
   }, [grid, gridSize, offset, zoom, hoveredTile, selectedTile, overlayMode, imagesLoaded, canvasSize, dragStartTile, dragEndTile]);
   
+  // Animate decorative car traffic on top of the base canvas
+  useEffect(() => {
+    const canvas = carsCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.imageSmoothingEnabled = false;
+    
+    let animationFrameId: number;
+    let lastTime = performance.now();
+    
+    const render = (time: number) => {
+      animationFrameId = requestAnimationFrame(render);
+      const delta = Math.min((time - lastTime) / 1000, 0.3);
+      lastTime = time;
+      if (delta > 0) {
+        updateCars(delta);
+      }
+      drawCars(ctx);
+    };
+    
+    animationFrameId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [canvasSize.width, canvasSize.height, updateCars, drawCars]);
+  
   // Helper function to check if a tile is part of a multi-tile building footprint
   function isPartOfMultiTileBuilding(gridX: number, gridY: number): boolean {
     // Check all possible origin positions that could have a multi-tile building covering this tile
@@ -1277,6 +1481,34 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
           
           // Check if this tile is within the footprint of the building at origin
           if (buildingSize.width > 1 || buildingSize.height > 1) {
+            if (gridX >= originX && gridX < originX + buildingSize.width &&
+                gridY >= originY && gridY < originY + buildingSize.height) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  // Helper function to check if a tile is part of a building that needs parking lot (stadium, hospital, power_plant)
+  function isPartOfParkingLotBuilding(gridX: number, gridY: number): boolean {
+    const maxSize = 4; // Maximum building size (airport is 4x4)
+    const parkingLotBuildings: BuildingType[] = ['stadium', 'hospital', 'power_plant'];
+    
+    for (let dy = 0; dy < maxSize; dy++) {
+      for (let dx = 0; dx < maxSize; dx++) {
+        const originX = gridX - dx;
+        const originY = gridY - dy;
+        
+        if (originX >= 0 && originX < gridSize && originY >= 0 && originY < gridSize) {
+          const originTile = grid[originY][originX];
+          
+          // Check if this is a parking lot building and if this tile is within its footprint
+          if (parkingLotBuildings.includes(originTile.building.type)) {
+            const buildingSize = getBuildingSize(originTile.building.type);
             if (gridX >= originX && gridX < originX + buildingSize.width &&
                 gridY >= originY && gridY < originY + buildingSize.height) {
               return true;
@@ -1312,6 +1544,10 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
     const isPartOfBuilding = tile.building.type === 'empty' && isPartOfMultiTileBuilding(tile.x, tile.y);
     const isBuilding = isDirectBuilding || isPartOfBuilding;
     
+    // Check if this tile is part of a parking lot building (stadium, hospital, power_plant)
+    const isParkingLot = (tile.building.type === 'stadium' || tile.building.type === 'hospital' || tile.building.type === 'power_plant') ||
+                         (tile.building.type === 'empty' && isPartOfParkingLotBuilding(tile.x, tile.y));
+    
     if (tile.building.type === 'water') {
       topColor = '#2563eb';
       leftColor = '#1d4ed8';
@@ -1327,8 +1563,14 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       leftColor = '#3d6634';
       rightColor = '#5a8f4f';
       strokeColor = '#2d4a26';
+    } else if (isParkingLot) {
+      // Grey parking lot tiles for stadium, hospital, and power plant
+      topColor = '#6b7280';
+      leftColor = '#4b5563';
+      rightColor = '#9ca3af';
+      strokeColor = '#374151';
     } else if (isBuilding) {
-      // White tiles for all buildings
+      // White tiles for all other buildings
       topColor = '#ffffff';
       leftColor = '#e5e5e5';
       rightColor = '#f5f5f5';
@@ -1576,7 +1818,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
       imageSrc = BUILDING_IMAGES[buildingType];
       // Larger buildings need bigger sprites
       if (buildingType === 'power_plant') sizeMultiplier = 2.25; // Scaled down 10% from 2.5
-      else if (buildingType === 'stadium') sizeMultiplier = 3.5;
+      else if (buildingType === 'stadium') sizeMultiplier = 2.8; // Scaled down 20% from 3.5
       else if (buildingType === 'university') sizeMultiplier = 2.8;
       else if (buildingType === 'hospital') sizeMultiplier = 2.25; // 2x2 building
       else if (buildingType === 'school') sizeMultiplier = 2.25; // 2x2 building
@@ -1607,7 +1849,7 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         drawY += h * 0.4; // Shift school downward
       }
       if (buildingType === 'stadium') {
-        drawY += h * 0.7; // Shift stadium down a lot
+        drawY += h * 1.0; // Shift stadium down more
       }
       
       // Draw with crisp rendering
@@ -1769,6 +2011,12 @@ function CanvasIsometricGrid({ overlayMode, selectedTile, setSelectedTile }: {
         width={canvasSize.width}
         height={canvasSize.height}
         className="block"
+      />
+      <canvas
+        ref={carsCanvasRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        className="absolute inset-0 pointer-events-none"
       />
       
       {selectedTile && selectedTool === 'select' && (
