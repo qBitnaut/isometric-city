@@ -178,7 +178,7 @@ function loadGameState(): GameState | null {
       // Try to decompress first (new format)
       // If it fails or returns null/garbage, fall back to parsing as plain JSON (legacy format)
       let jsonString = decompressFromUTF16(saved);
-      
+
       // Check if decompression returned valid-looking JSON (should start with '{')
       // lz-string can return garbage strings when given invalid input
       if (!jsonString || !jsonString.startsWith('{')) {
@@ -192,17 +192,17 @@ function loadGameState(): GameState | null {
           return null;
         }
       }
-      
+
       const parsed = JSON.parse(jsonString);
       // Validate it has essential properties
-      if (parsed && 
-          parsed.grid && 
-          Array.isArray(parsed.grid) &&
-          parsed.gridSize && 
-          typeof parsed.gridSize === 'number' &&
-          parsed.stats &&
-          parsed.stats.money !== undefined &&
-          parsed.stats.population !== undefined) {
+      if (parsed &&
+        parsed.grid &&
+        Array.isArray(parsed.grid) &&
+        parsed.gridSize &&
+        typeof parsed.gridSize === 'number' &&
+        parsed.stats &&
+        parsed.stats.money !== undefined &&
+        parsed.stats.population !== undefined) {
         // Migrate park_medium to park_large
         if (parsed.grid) {
           for (let y = 0; y < parsed.grid.length; y++) {
@@ -305,18 +305,18 @@ function loadGameState(): GameState | null {
 function optimizeStateForSave(state: GameState): GameState {
   // Create a shallow copy to avoid mutating the original
   const optimized = { ...state };
-  
+
   // Clear notifications (they're transient)
   optimized.notifications = [];
-  
+
   // Clear advisor messages (they're regenerated each tick)
   optimized.advisorMessages = [];
-  
+
   // Limit history to last 50 entries (instead of 100)
   if (optimized.history && optimized.history.length > 50) {
     optimized.history = optimized.history.slice(-50);
   }
-  
+
   return optimized;
 }
 
@@ -325,10 +325,10 @@ function tryFreeLocalStorageSpace(): void {
   try {
     // Clear any old saved city restore data
     localStorage.removeItem(SAVED_CITY_STORAGE_KEY);
-    
+
     // Clear sprite test data if any
     localStorage.removeItem('isocity_sprite_test');
-    
+
     // Clear any other temporary keys
     const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -348,26 +348,26 @@ function tryFreeLocalStorageSpace(): void {
 // PERF: Uses Web Worker for BOTH serialization and compression - no main thread blocking!
 async function saveGameStateAsync(state: GameState): Promise<void> {
   if (typeof window === 'undefined') return;
-  
+
   // Validate state before saving
   if (!state || !state.grid || !state.gridSize || !state.stats) {
     console.error('Invalid game state, cannot save', { state, hasGrid: !!state?.grid, hasGridSize: !!state?.gridSize, hasStats: !!state?.stats });
     return;
   }
-  
+
   try {
     // Step 1: Optimize state (fast, stays on main thread)
     const optimizedState = optimizeStateForSave(state);
-    
+
     // Step 2: Serialize + Compress using Web Worker (BOTH operations off main thread!)
     const compressed = await serializeAndCompressAsync(optimizedState);
-    
+
     // Check size limit
     if (compressed.length > 5 * 1024 * 1024) {
       console.error('Compressed game state too large to save:', compressed.length, 'chars');
       return;
     }
-    
+
     // Step 3: Write to localStorage (fast)
     try {
       localStorage.setItem(STORAGE_KEY, compressed);
@@ -575,16 +575,16 @@ function saveSavedCitiesIndex(cities: SavedCityMeta[]): void {
 // PERF: Uses Web Worker for BOTH serialization and compression - no main thread blocking!
 async function saveCityStateAsync(cityId: string, state: GameState): Promise<void> {
   if (typeof window === 'undefined') return;
-  
+
   try {
     // Both JSON.stringify and compression happen in the worker
     const compressed = await serializeAndCompressAsync(state);
-    
+
     if (compressed.length > 5 * 1024 * 1024) {
       console.error('Compressed city state too large to save');
       return;
     }
-    
+
     localStorage.setItem(SAVED_CITY_PREFIX + cityId, compressed);
   } catch (e) {
     if (e instanceof DOMException && (e.code === 22 || e.code === 1014)) {
@@ -609,7 +609,7 @@ function loadCityState(cityId: string): GameState | null {
       // Try to decompress first (new format)
       // lz-string can return garbage when given invalid input, so check for valid JSON start
       let jsonString = decompressFromUTF16(saved);
-      
+
       // Check if decompression returned valid-looking JSON
       if (!jsonString || !jsonString.startsWith('{')) {
         // Check if saved string itself is JSON (legacy uncompressed format)
@@ -621,7 +621,7 @@ function loadCityState(cityId: string): GameState | null {
           return null;
         }
       }
-      
+
       const parsed = JSON.parse(jsonString);
       if (parsed && parsed.grid && parsed.gridSize && parsed.stats) {
         return parsed as GameState;
@@ -645,28 +645,28 @@ function deleteCityState(cityId: string): void {
 
 export function GameProvider({ children, startFresh = false }: { children: React.ReactNode; startFresh?: boolean }) {
   // Start with a default state, we'll load from localStorage after mount (unless startFresh is true)
-  const [state, setState] = useState<GameState>(() => createInitialGameState(DEFAULT_GRID_SIZE, 'IsoCity'));
-  
+  const [state, setState] = useState<GameState>(() => createInitialGameState(DEFAULT_GRID_SIZE, 'Veocity Simulator'));
+
   const [hasExistingGame, setHasExistingGame] = useState(false);
   const [isStateReady, setIsStateReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextSaveRef = useRef(false);
   const hasLoadedRef = useRef(false);
-  
+
   // Callback for multiplayer action broadcast
   const placeCallbackRef = useRef<((args: { x: number; y: number; tool: Tool }) => void) | null>(null);
   const bridgeCallbackRef = useRef<((args: { pathTiles: { x: number; y: number }[]; trackType: 'road' | 'rail' }) => void) | null>(null);
-  
+
   // Sprite pack state
   const [currentSpritePack, setCurrentSpritePack] = useState<SpritePack>(() => getSpritePack(DEFAULT_SPRITE_PACK_ID));
-  
+
   // Day/night mode state
   const [dayNightMode, setDayNightModeState] = useState<DayNightMode>('auto');
-  
+
   // Saved cities state for multi-city save system
   const [savedCities, setSavedCities] = useState<SavedCityMeta[]>([]);
-  
+
   // Load game state and sprite pack from localStorage on mount (client-side only)
   useEffect(() => {
     // Load sprite pack preference
@@ -674,15 +674,15 @@ export function GameProvider({ children, startFresh = false }: { children: React
     const pack = getSpritePack(savedPackId);
     setCurrentSpritePack(pack);
     setActiveSpritePack(pack);
-    
+
     // Load day/night mode preference
     const savedDayNightMode = loadDayNightMode();
     setDayNightModeState(savedDayNightMode);
-    
+
     // Load saved cities index
     const cities = loadSavedCitiesIndex();
     setSavedCities(cities);
-    
+
     // Load game state (unless startFresh is true - used for co-op to start with a new city)
     if (!startFresh) {
       const saved = loadGameState();
@@ -701,35 +701,35 @@ export function GameProvider({ children, startFresh = false }: { children: React
     // Mark state as ready - consumers should wait for this before using state
     setIsStateReady(true);
   }, [startFresh]);
-  
+
   // Track the state that needs to be saved
   const lastSaveTimeRef = useRef<number>(0);
   const saveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+
   // Update the state to save whenever state changes
   // PERF: Just mark that state has changed - defer expensive deep copy to actual save time
   const stateChangedRef = useRef(false);
   const latestStateRef = useRef(state);
   latestStateRef.current = state;
-  
+
   useEffect(() => {
     if (!hasLoadedRef.current) {
       return;
     }
-    
+
     if (skipNextSaveRef.current) {
       skipNextSaveRef.current = false;
       lastSaveTimeRef.current = Date.now();
       return;
     }
-    
+
     // PERF: Just mark that state changed instead of expensive deep copy every time
     stateChangedRef.current = true;
   }, [state]);
-  
+
   // PERF: Track if a save is in progress to avoid overlapping saves
   const saveInProgressRef = useRef(false);
-  
+
   // Separate effect that actually performs saves on an interval
   useEffect(() => {
     // Wait for initial load - just check once after a short delay
@@ -737,12 +737,12 @@ export function GameProvider({ children, startFresh = false }: { children: React
       if (!hasLoadedRef.current) {
         return;
       }
-      
+
       // Clear any existing save interval
       if (saveIntervalRef.current) {
         clearInterval(saveIntervalRef.current);
       }
-      
+
       // Set up interval to save every 5 seconds
       // PERF: Save operation is broken into chunks internally to avoid blocking
       saveIntervalRef.current = setInterval(() => {
@@ -751,22 +751,22 @@ export function GameProvider({ children, startFresh = false }: { children: React
           skipNextSaveRef.current = false;
           return;
         }
-        
+
         // Don't save if a save is already in progress
         if (saveInProgressRef.current) {
           return;
         }
-        
+
         // Don't save if state hasn't changed
         if (!stateChangedRef.current) {
           return;
         }
-        
+
         // Mark save as in progress
         saveInProgressRef.current = true;
         stateChangedRef.current = false;
         setIsSaving(true);
-        
+
         // PERF: No need for structuredClone here - the worker handles everything
         // postMessage internally clones the data when sending to the worker
         saveGameState(latestStateRef.current, () => {
@@ -777,7 +777,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         });
       }, 5000); // Save every 5 seconds
     }, 200); // Wait 200ms for initial load
-    
+
     return () => {
       clearTimeout(checkLoadedTimeout);
       if (saveIntervalRef.current) {
@@ -789,7 +789,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // PERF: Track tick count to only sync UI-visible changes to React periodically
   const tickCountRef = useRef(0);
   const lastUiSyncRef = useRef(0);
-  
+
   // Simulation loop - PERF: Runs simulation but throttles React updates aggressively
   // Grid updates go to ref (canvas reads from ref), React only gets UI updates
   useEffect(() => {
@@ -812,12 +812,12 @@ export function GameProvider({ children, startFresh = false }: { children: React
       timer = setInterval(() => {
         tickCountRef.current++;
         const now = performance.now();
-        
+
         // PERF: Run simulation and update ref immediately (for canvas)
         const newState = simulateTick(latestStateRef.current);
         latestStateRef.current = newState;
         stateChangedRef.current = true;
-        
+
         // PERF: Only sync to React every 500ms to avoid expensive reconciliation
         // Canvas reads from latestStateRef so it sees updates immediately
         // React state is only needed for UI elements (stats, budget display)
@@ -872,7 +872,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
     // For multiplayer broadcast, we need to capture the tool synchronously
     // before React batches the setState. We read from the latest state ref.
     const currentTool = latestStateRef.current.selectedTool;
-    
+
     setState((prev) => {
       const tool = prev.selectedTool;
       if (tool === 'select') return prev;
@@ -894,47 +894,47 @@ export function GameProvider({ children, startFresh = false }: { children: React
 
       if (zone && tile.zone === zone) return prev;
       if (building && tile.building.type === building) return prev;
-      
+
       // Handle subway tool separately (underground placement)
       if (tool === 'subway') {
         // Can't place subway under water
         if (tile.building.type === 'water') return prev;
         // Already has subway
         if (tile.hasSubway) return prev;
-        
+
         const nextState = placeSubway(prev, x, y);
         if (nextState === prev) return prev;
-        
+
         return {
           ...nextState,
           stats: { ...nextState.stats, money: nextState.stats.money - cost },
         };
       }
-      
+
       // Handle water terraform tool separately
       if (tool === 'zone_water') {
         // Already water - do nothing
         if (tile.building.type === 'water') return prev;
         // Don't allow terraforming bridges - would break them
         if (tile.building.type === 'bridge') return prev;
-        
+
         const nextState = placeWaterTerraform(prev, x, y);
         if (nextState === prev) return prev;
-        
+
         return {
           ...nextState,
           stats: { ...nextState.stats, money: nextState.stats.money - cost },
         };
       }
-      
+
       // Handle land terraform tool separately
       if (tool === 'zone_land') {
         // Only works on water
         if (tile.building.type !== 'water') return prev;
-        
+
         const nextState = placeLandTerraform(prev, x, y);
         if (nextState === prev) return prev;
-        
+
         return {
           ...nextState,
           stats: { ...nextState.stats, money: nextState.stats.money - cost },
@@ -964,7 +964,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
 
       return nextState;
     });
-    
+
     // Broadcast to multiplayer if this is a local action (not remote)
     // We use the tool captured before setState since React 18 batches async
     if (!isRemote && currentTool !== 'select' && placeCallbackRef.current) {
@@ -975,7 +975,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   // Called after a road/rail drag operation to create bridges for water crossings
   const finishTrackDrag = useCallback((pathTiles: { x: number; y: number }[], trackType: 'road' | 'rail', isRemote = false) => {
     setState((prev) => createBridgesOnPath(prev, pathTiles, trackType));
-    
+
     // Broadcast to multiplayer if this is a local action (not remote)
     if (!isRemote && bridgeCallbackRef.current) {
       bridgeCallbackRef.current({ pathTiles, trackType });
@@ -1050,16 +1050,16 @@ export function GameProvider({ children, startFresh = false }: { children: React
   const checkAndDiscoverCities = useCallback((onDiscover?: (city: { id: string; direction: 'north' | 'south' | 'east' | 'west'; name: string }) => void): void => {
     setState((prev) => {
       const newlyDiscovered = checkForDiscoverableCities(prev.grid, prev.gridSize, prev.adjacentCities);
-      
+
       if (newlyDiscovered.length === 0) return prev;
-      
+
       // Discover the first city found
       const cityToDiscover = newlyDiscovered[0];
-      
+
       const updatedCities = prev.adjacentCities.map(c =>
         c.id === cityToDiscover.id ? { ...c, discovered: true } : c
       );
-      
+
       // Call the callback after state update is scheduled
       if (onDiscover) {
         setTimeout(() => {
@@ -1070,7 +1070,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
           });
         }, 0);
       }
-      
+
       return {
         ...prev,
         adjacentCities: updatedCities,
@@ -1081,7 +1081,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   const setDisastersEnabled = useCallback((enabled: boolean) => {
     setState((prev) => ({ ...prev, disastersEnabled: enabled }));
   }, []);
-  
+
   const setPlaceCallback = useCallback((callback: ((args: { x: number; y: number; tool: Tool }) => void) | null) => {
     placeCallbackRef.current = callback;
   }, []);
@@ -1104,9 +1104,9 @@ export function GameProvider({ children, startFresh = false }: { children: React
 
   // Compute the visual hour based on the day/night mode override
   // This doesn't affect time progression, just the rendering
-  const visualHour = dayNightMode === 'auto' 
-    ? state.hour 
-    : dayNightMode === 'day' 
+  const visualHour = dayNightMode === 'auto'
+    ? state.hour
+    : dayNightMode === 'day'
       ? 12  // Noon - full daylight
       : 22; // Night time
 
@@ -1124,14 +1124,14 @@ export function GameProvider({ children, startFresh = false }: { children: React
     try {
       const parsed = JSON.parse(stateString);
       // Validate it has essential properties
-      if (parsed && 
-          parsed.grid && 
-          Array.isArray(parsed.grid) &&
-          parsed.gridSize && 
-          typeof parsed.gridSize === 'number' &&
-          parsed.stats &&
-          parsed.stats.money !== undefined &&
-          parsed.stats.population !== undefined) {
+      if (parsed &&
+        parsed.grid &&
+        Array.isArray(parsed.grid) &&
+        parsed.gridSize &&
+        typeof parsed.gridSize === 'number' &&
+        parsed.stats &&
+        parsed.stats.money !== undefined &&
+        parsed.stats.population !== undefined) {
         // Ensure new fields exist for backward compatibility
         if (!parsed.adjacentCities) {
           parsed.adjacentCities = [];
@@ -1217,7 +1217,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   const expandCity = useCallback(() => {
     setState((prev) => {
       const { grid: newGrid, newSize } = expandGrid(prev.grid, prev.gridSize, 15);
-      
+
       // Create new service grids with expanded size (all initialized to 0)
       const createServiceGrid = (): number[][] => {
         const grid: number[][] = [];
@@ -1226,7 +1226,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return grid;
       };
-      
+
       // Create new boolean grids with expanded size (all initialized to false)
       const createBoolGrid = (): boolean[][] => {
         const grid: boolean[][] = [];
@@ -1235,7 +1235,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return grid;
       };
-      
+
       // Copy old service values to new positions (offset by 15)
       const expandServiceGrid = (oldGrid: number[][]): number[][] => {
         const newServiceGrid = createServiceGrid();
@@ -1256,7 +1256,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return newServiceGrid;
       };
-      
+
       // Copy old boolean grid values to new positions (offset by 15)
       const expandBoolGrid = (oldGrid: boolean[][]): boolean[][] => {
         const newBoolGrid = createBoolGrid();
@@ -1276,7 +1276,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return newBoolGrid;
       };
-      
+
       return {
         ...prev,
         grid: newGrid,
@@ -1308,15 +1308,15 @@ export function GameProvider({ children, startFresh = false }: { children: React
     let success = false;
     setState((prev) => {
       const result = shrinkGrid(prev.grid, prev.gridSize, 15);
-      
+
       // If shrink failed (grid too small), return previous state unchanged
       if (!result) {
         return prev;
       }
-      
+
       success = true;
       const { grid: newGrid, newSize } = result;
-      
+
       // Create new service grids with shrunken size
       const createServiceGrid = (): number[][] => {
         const grid: number[][] = [];
@@ -1325,7 +1325,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return grid;
       };
-      
+
       // Create new boolean grids with shrunken size
       const createBoolGrid = (): boolean[][] => {
         const grid: boolean[][] = [];
@@ -1334,7 +1334,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return grid;
       };
-      
+
       // Copy old service values from interior positions (offset by 15)
       const shrinkServiceGrid = (oldGrid: number[][]): number[][] => {
         const newServiceGrid = createServiceGrid();
@@ -1355,7 +1355,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return newServiceGrid;
       };
-      
+
       // Copy old boolean grid values from interior positions (offset by 15)
       const shrinkBoolGrid = (oldGrid: boolean[][]): boolean[][] => {
         const newBoolGrid = createBoolGrid();
@@ -1375,7 +1375,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
         return newBoolGrid;
       };
-      
+
       return {
         ...prev,
         grid: newGrid,
@@ -1475,16 +1475,16 @@ export function GameProvider({ children, startFresh = false }: { children: React
       gridSize: state.gridSize,
       savedAt: Date.now(),
     };
-    
+
     // Save the city state
     saveCityState(state.id, state);
-    
+
     // Update the index
     setSavedCities((prev) => {
       // Check if this city already exists in the list
       const existingIndex = prev.findIndex((c) => c.id === state.id);
       let newCities: SavedCityMeta[];
-      
+
       if (existingIndex >= 0) {
         // Update existing entry
         newCities = [...prev];
@@ -1493,13 +1493,13 @@ export function GameProvider({ children, startFresh = false }: { children: React
         // Add new entry
         newCities = [...prev, cityMeta];
       }
-      
+
       // Sort by savedAt descending (most recent first)
       newCities.sort((a, b) => b.savedAt - a.savedAt);
-      
+
       // Persist to localStorage
       saveSavedCitiesIndex(newCities);
-      
+
       return newCities;
     });
   }, [state]);
@@ -1508,12 +1508,12 @@ export function GameProvider({ children, startFresh = false }: { children: React
   const loadSavedCity = useCallback((cityId: string): boolean => {
     const cityState = loadCityState(cityId);
     if (!cityState) return false;
-    
+
     // Ensure the loaded state has an ID
     if (!cityState.id) {
       cityState.id = cityId;
     }
-    
+
     // Perform migrations for backward compatibility
     if (!cityState.adjacentCities) {
       cityState.adjacentCities = [];
@@ -1563,16 +1563,16 @@ export function GameProvider({ children, startFresh = false }: { children: React
         }
       }
     }
-    
+
     skipNextSaveRef.current = true;
     setState((prev) => ({
       ...cityState,
       gameVersion: (prev.gameVersion ?? 0) + 1,
     }));
-    
+
     // Also update the current game in local storage
     saveGameState(cityState);
-    
+
     return true;
   }, []);
 
@@ -1580,7 +1580,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
   const deleteSavedCity = useCallback((cityId: string) => {
     // Delete the city state
     deleteCityState(cityId);
-    
+
     // Update the index
     setSavedCities((prev) => {
       const newCities = prev.filter((c) => c.id !== cityId);
@@ -1597,7 +1597,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
       cityState.cityName = newName;
       saveCityState(cityId, cityState);
     }
-    
+
     // Update the index
     setSavedCities((prev) => {
       const newCities = prev.map((c) =>
@@ -1606,7 +1606,7 @@ export function GameProvider({ children, startFresh = false }: { children: React
       saveSavedCitiesIndex(newCities);
       return newCities;
     });
-    
+
     // If the current game is the one being renamed, update its state too
     if (state.id === cityId) {
       setState((prev) => ({ ...prev, cityName: newName }));

@@ -74,29 +74,29 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMousePos = useRef<{ x: number; y: number } | null>(null);
   const m = useMessages();
-  
+
   const hasSelectedTool = tools.includes(selectedTool);
   const SUBMENU_GAP = 12; // Gap between sidebar and submenu
   const SUBMENU_MAX_HEIGHT = 220; // Approximate max height of submenu
-  
+
   const clearCloseTimeout = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
   }, []);
-  
+
   const handleMouseEnter = useCallback(() => {
     clearCloseTimeout();
     // Calculate position based on button location
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const viewportHeight = window.innerHeight;
-      
+
       // Check if opening downward would overflow the screen
       const spaceBelow = viewportHeight - rect.top;
       const openUpward = forceOpenUpward || (spaceBelow < SUBMENU_MAX_HEIGHT && rect.top > SUBMENU_MAX_HEIGHT);
-      
+
       setMenuPosition({
         top: openUpward ? rect.bottom : rect.top,
         left: rect.right + SUBMENU_GAP,
@@ -106,54 +106,54 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
     }
     setIsOpen(true);
   }, [clearCloseTimeout, forceOpenUpward]);
-  
+
   // Triangle rule: Check if cursor is moving toward the submenu
   const isMovingTowardSubmenu = useCallback((e: React.MouseEvent) => {
     if (!lastMousePos.current || !submenuRef.current) return false;
-    
+
     const submenuRect = submenuRef.current.getBoundingClientRect();
     const currentX = e.clientX;
     const currentY = e.clientY;
     const lastX = lastMousePos.current.x;
     const lastY = lastMousePos.current.y;
-    
+
     // Check if moving rightward (toward submenu)
     const movingRight = currentX > lastX;
-    
+
     // Check if cursor is within vertical bounds of submenu (with generous padding)
     const padding = 50;
-    const withinVerticalBounds = 
-      currentY >= submenuRect.top - padding && 
+    const withinVerticalBounds =
+      currentY >= submenuRect.top - padding &&
       currentY <= submenuRect.bottom + padding;
-    
+
     return movingRight && withinVerticalBounds;
   }, []);
-  
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   }, []);
-  
+
   const handleMouseLeave = useCallback((e: React.MouseEvent) => {
     // If moving toward submenu, use a longer delay
     const delay = isMovingTowardSubmenu(e) ? 300 : 100;
-    
+
     clearCloseTimeout();
     timeoutRef.current = setTimeout(() => {
       setIsOpen(false);
     }, delay);
   }, [clearCloseTimeout, isMovingTowardSubmenu]);
-  
+
   const handleSubmenuEnter = useCallback(() => {
     clearCloseTimeout();
   }, [clearCloseTimeout]);
-  
+
   const handleSubmenuLeave = useCallback(() => {
     clearCloseTimeout();
     timeoutRef.current = setTimeout(() => {
       setIsOpen(false);
     }, 100);
   }, [clearCloseTimeout]);
-  
+
   // Clean up timeout on unmount
   useEffect(() => {
     return () => {
@@ -162,9 +162,9 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
       }
     };
   }, []);
-  
+
   return (
-    <div 
+    <div
       className="relative"
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
@@ -174,21 +174,20 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
       <Button
         ref={buttonRef}
         variant={hasSelectedTool ? 'default' : 'ghost'}
-        className={`w-full justify-between gap-2 px-3 py-2.5 h-auto text-sm group transition-all duration-200 ${
-          hasSelectedTool ? 'bg-primary text-primary-foreground' : ''
-        } ${isOpen ? 'bg-muted/80' : ''}`}
+        className={`w-full justify-between gap-2 px-3 py-2.5 h-auto text-sm group transition-all duration-200 ${hasSelectedTool ? 'bg-primary text-primary-foreground' : ''
+          } ${isOpen ? 'bg-muted/80' : ''}`}
       >
         <span className="font-medium">{m(label as Parameters<typeof m>[0])}</span>
-        <svg 
+        <svg
           className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
-          fill="none" 
-          viewBox="0 0 24 24" 
+          fill="none"
+          viewBox="0 0 24 24"
           stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </Button>
-      
+
       {/* Invisible bridge/safe-zone between button and submenu for triangle rule */}
       {isOpen && (
         <div
@@ -204,16 +203,16 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
           onMouseLeave={handleSubmenuLeave}
         />
       )}
-      
+
       {/* Flyout Submenu - uses fixed positioning to escape all parent containers */}
       {isOpen && (
-        <div 
+        <div
           ref={submenuRef}
           className="fixed w-52 bg-sidebar backdrop-blur-sm border border-sidebar-border rounded-md shadow-xl overflow-hidden animate-submenu-in"
-          style={{ 
+          style={{
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(96, 165, 250, 0.1)',
             zIndex: 9999,
-            ...(menuPosition.openUpward 
+            ...(menuPosition.openUpward
               ? { bottom: `${window.innerHeight - menuPosition.top}px` }
               : { top: `${menuPosition.top}px` }),
             left: `${menuPosition.left}px`,
@@ -230,16 +229,15 @@ const HoverSubmenu = React.memo(function HoverSubmenu({
               if (!info) return null;
               const isSelected = selectedTool === tool;
               const canAfford = money >= info.cost;
-              
+
               return (
                 <Button
                   key={tool}
                   onClick={() => onSelectTool(tool)}
                   disabled={!canAfford && info.cost > 0}
                   variant={isSelected ? 'default' : 'ghost'}
-                  className={`w-full justify-start gap-2 px-3 py-2 h-auto text-sm transition-all duration-150 ${
-                    isSelected ? 'bg-primary text-primary-foreground shadow-sm' : 'hover:bg-muted/60'
-                  }`}
+                  className={`w-full justify-start gap-2 px-3 py-2 h-auto text-sm transition-all duration-150 ${isSelected ? 'bg-primary text-primary-foreground shadow-sm' : 'hover:bg-muted/60'
+                    }`}
                   title={`${m(info.description)} - Cost: $${info.cost.toLocaleString()}`}
                 >
                   <span className="flex-1 text-left truncate">{m(info.name)}</span>
@@ -269,17 +267,17 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMousePos = useRef<{ x: number; y: number } | null>(null);
   const m = useMessages();
-  
+
   const SUBMENU_GAP = 12;
   const SUBMENU_MAX_HEIGHT = 220;
-  
+
   const clearCloseTimeout = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
   }, []);
-  
+
   const handleMouseEnter = useCallback(() => {
     clearCloseTimeout();
     if (buttonRef.current) {
@@ -287,7 +285,7 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
       const viewportHeight = window.innerHeight;
       const spaceBelow = viewportHeight - rect.top;
       const openUpward = spaceBelow < SUBMENU_MAX_HEIGHT && rect.top > SUBMENU_MAX_HEIGHT;
-      
+
       setMenuPosition({
         top: openUpward ? rect.bottom : rect.top,
         left: rect.right + SUBMENU_GAP,
@@ -297,28 +295,28 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
     }
     setIsOpen(true);
   }, [clearCloseTimeout]);
-  
+
   const isMovingTowardSubmenu = useCallback((e: React.MouseEvent) => {
     if (!lastMousePos.current || !submenuRef.current) return false;
-    
+
     const submenuRect = submenuRef.current.getBoundingClientRect();
     const currentX = e.clientX;
     const currentY = e.clientY;
     const lastX = lastMousePos.current.x;
-    
+
     const movingRight = currentX > lastX;
     const padding = 50;
-    const withinVerticalBounds = 
-      currentY >= submenuRect.top - padding && 
+    const withinVerticalBounds =
+      currentY >= submenuRect.top - padding &&
       currentY <= submenuRect.bottom + padding;
-    
+
     return movingRight && withinVerticalBounds;
   }, []);
-  
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     lastMousePos.current = { x: e.clientX, y: e.clientY };
   }, []);
-  
+
   const handleMouseLeave = useCallback((e: React.MouseEvent) => {
     const delay = isMovingTowardSubmenu(e) ? 300 : 100;
     clearCloseTimeout();
@@ -326,18 +324,18 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
       setIsOpen(false);
     }, delay);
   }, [clearCloseTimeout, isMovingTowardSubmenu]);
-  
+
   const handleSubmenuEnter = useCallback(() => {
     clearCloseTimeout();
   }, [clearCloseTimeout]);
-  
+
   const handleSubmenuLeave = useCallback(() => {
     clearCloseTimeout();
     timeoutRef.current = setTimeout(() => {
       setIsOpen(false);
     }, 100);
   }, [clearCloseTimeout]);
-  
+
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
@@ -345,9 +343,9 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
       }
     };
   }, []);
-  
+
   return (
-    <div 
+    <div
       className="relative"
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
@@ -359,16 +357,16 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
         className={`w-full justify-between gap-2 px-3 py-2.5 h-auto text-sm group transition-all duration-200 ${isOpen ? 'bg-muted/80' : ''}`}
       >
         <span className="font-medium">{m(label as Parameters<typeof m>[0])}</span>
-        <svg 
+        <svg
           className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
-          fill="none" 
-          viewBox="0 0 24 24" 
+          fill="none"
+          viewBox="0 0 24 24"
           stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </Button>
-      
+
       {isOpen && (
         <div
           className="fixed"
@@ -383,15 +381,15 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
           onMouseLeave={handleSubmenuLeave}
         />
       )}
-      
+
       {isOpen && (
-        <div 
+        <div
           ref={submenuRef}
           className="fixed w-52 bg-sidebar backdrop-blur-sm border border-sidebar-border rounded-md shadow-xl overflow-hidden animate-submenu-in"
-          style={{ 
+          style={{
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(96, 165, 250, 0.1)',
             zIndex: 9999,
-            ...(menuPosition.openUpward 
+            ...(menuPosition.openUpward
               ? { bottom: `${window.innerHeight - menuPosition.top}px` }
               : { top: `${menuPosition.top}px` }),
             left: `${menuPosition.left}px`,
@@ -422,13 +420,13 @@ const ActionSubmenu = React.memo(function ActionSubmenu({
 });
 
 // Exit confirmation dialog component
-function ExitDialog({ 
-  open, 
-  onOpenChange, 
-  onSaveAndExit, 
-  onExitWithoutSaving 
-}: { 
-  open: boolean; 
+function ExitDialog({
+  open,
+  onOpenChange,
+  onSaveAndExit,
+  onExitWithoutSaving
+}: {
+  open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaveAndExit: () => void;
   onExitWithoutSaving: () => void;
@@ -470,7 +468,7 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
   const [showShareModal, setShowShareModal] = useState(false);
   const multiplayer = useMultiplayerOptional();
   const hasShownShareModalRef = useRef(false);
-  
+
   // Auto-show share modal when first connecting as host (not guest)
   // Guests have initialState set (received from host), hosts don't
   useEffect(() => {
@@ -481,31 +479,31 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
     }
   }, [multiplayer?.connectionState, multiplayer?.roomCode, multiplayer?.initialState]);
   const m = useMessages();
-  
+
   const handleSaveAndExit = useCallback(() => {
     saveCity();
     setShowExitDialog(false);
     onExit?.();
   }, [saveCity, onExit]);
-  
+
   const handleExitWithoutSaving = useCallback(() => {
     setShowExitDialog(false);
     onExit?.();
   }, [onExit]);
-  
+
   // Direct tool categories (shown inline)
   const directCategories = useMemo(() => ({
     'TOOLS': ['select', 'bulldoze', 'road', 'rail', 'subway'] as Tool[],
     'ZONES': ['zone_residential', 'zone_commercial', 'zone_industrial'] as Tool[],
   }), []);
-  
+
   // Zoning submenu (shown under ZONES section, before BUILDINGS)
   const zoningSubmenu = useMemo(() => ({
     key: 'zoning',
     label: CATEGORY_LABELS.zoning,
     tools: ['zone_dezone', 'zone_water', 'zone_land'] as Tool[]
   }), []);
-  
+
   // Expand City submenu (shown under TOOLS section)
   const expandCityActions = useMemo(() => [
     {
@@ -521,53 +519,53 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
       onClick: shrinkCity,
     },
   ], [expandCity, shrinkCity]);
-  
+
   // Submenu categories (hover to expand) - includes all new assets from main
   const submenuCategories = useMemo(() => [
-    { 
-      key: 'services', 
-      label: CATEGORY_LABELS.services, 
+    {
+      key: 'services',
+      label: CATEGORY_LABELS.services,
       tools: ['police_station', 'fire_station', 'hospital', 'school', 'university'] as Tool[]
     },
-    { 
-      key: 'parks', 
-      label: CATEGORY_LABELS.parks, 
+    {
+      key: 'parks',
+      label: CATEGORY_LABELS.parks,
       tools: ['tree', 'park', 'park_large', 'tennis', 'playground_small', 'playground_large', 'community_garden', 'pond_park', 'park_gate', 'greenhouse_garden', 'mini_golf_course', 'go_kart_track', 'amphitheater', 'roller_coaster_small', 'campground', 'cabin_house', 'mountain_lodge', 'mountain_trailhead'] as Tool[]
     },
-    { 
-      key: 'sports', 
-      label: CATEGORY_LABELS.sports, 
+    {
+      key: 'sports',
+      label: CATEGORY_LABELS.sports,
       tools: ['basketball_courts', 'soccer_field_small', 'baseball_field_small', 'football_field', 'baseball_stadium', 'swimming_pool', 'skate_park', 'bleachers_field'] as Tool[]
     },
-    { 
-      key: 'waterfront', 
-      label: CATEGORY_LABELS.waterfront, 
+    {
+      key: 'waterfront',
+      label: CATEGORY_LABELS.waterfront,
       tools: ['marina_docks_small', 'pier_large'] as Tool[]
     },
-    { 
-      key: 'community', 
-      label: CATEGORY_LABELS.community, 
+    {
+      key: 'community',
+      label: CATEGORY_LABELS.community,
       tools: ['community_center', 'animal_pens_farm', 'office_building_small'] as Tool[]
     },
-    { 
-      key: 'utilities', 
-      label: CATEGORY_LABELS.utilities, 
+    {
+      key: 'utilities',
+      label: CATEGORY_LABELS.utilities,
       tools: ['power_plant', 'water_tower', 'subway_station', 'rail_station'] as Tool[],
       forceOpenUpward: true
     },
-    { 
-      key: 'special', 
-      label: CATEGORY_LABELS.special, 
+    {
+      key: 'special',
+      label: CATEGORY_LABELS.special,
       tools: ['stadium', 'museum', 'airport', 'space_program', 'city_hall', 'amusement_park'] as Tool[],
       forceOpenUpward: true
     },
   ], []);
-  
+
   return (
     <div className="w-56 bg-sidebar border-r border-sidebar-border flex flex-col h-screen fixed left-0 top-0 z-40">
       <div className="px-4 py-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between">
-          <span className="text-sidebar-foreground font-bold tracking-tight">ISOCITY</span>
+          <span className="text-sidebar-foreground font-bold tracking-tight">VEOCITY SIMULATOR</span>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -576,10 +574,10 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
               title="Search (⌘K)"
               className="h-7 w-7 text-muted-foreground hover:text-sidebar-foreground"
             >
-              <svg 
-                className="w-4 h-4" 
-                fill="none" 
-                viewBox="0 0 24 24" 
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
                 stroke="currentColor"
               >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -605,10 +603,10 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
                 title="Exit to Main Menu"
                 className="h-7 w-7 text-muted-foreground hover:text-sidebar-foreground"
               >
-                <svg 
-                  className="w-4 h-4 -scale-x-100" 
-                  fill="none" 
-                  viewBox="0 0 24 24" 
+                <svg
+                  className="w-4 h-4 -scale-x-100"
+                  fill="none"
+                  viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -618,7 +616,7 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
           </div>
         </div>
       </div>
-      
+
       <ScrollArea className="flex-1 py-2">
         {/* Direct categories (TOOLS, ZONES) */}
         {Object.entries(directCategories).map(([category, tools]) => (
@@ -636,16 +634,15 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
                 if (!info) return null;
                 const isSelected = selectedTool === tool;
                 const canAfford = stats.money >= info.cost;
-                
+
                 return (
                   <Button
                     key={tool}
                     onClick={() => setTool(tool)}
                     disabled={!canAfford && info.cost > 0}
                     variant={isSelected ? 'default' : 'ghost'}
-                    className={`w-full justify-start gap-3 px-3 py-2 h-auto text-sm ${
-                      isSelected ? 'bg-primary text-primary-foreground' : ''
-                    }`}
+                    className={`w-full justify-start gap-3 px-3 py-2 h-auto text-sm ${isSelected ? 'bg-primary text-primary-foreground' : ''
+                      }`}
                     title={`${m(info.description)}${info.cost > 0 ? ` - Cost: $${info.cost}` : ''}`}
                   >
                     <span className="flex-1 text-left truncate">{m(info.name)}</span>
@@ -677,15 +674,15 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
             </div>
           </div>
         ))}
-        
+
         {/* Separator */}
         <div className="mx-4 my-2 h-px bg-sidebar-border/50" />
-        
+
         {/* Buildings header */}
         <div className="px-4 py-2 text-[10px] font-bold tracking-widest text-muted-foreground">
           BUILDINGS
         </div>
-        
+
         {/* Submenu categories */}
         <div className="px-2 flex flex-col gap-0.5">
           {submenuCategories.map(({ key, label, tools, forceOpenUpward }) => (
@@ -701,7 +698,7 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
           ))}
         </div>
       </ScrollArea>
-      
+
       <div className="border-t border-sidebar-border p-2">
         <div className="grid grid-cols-4 gap-1">
           {[
@@ -723,14 +720,14 @@ export const Sidebar = React.memo(function Sidebar({ onExit }: { onExit?: () => 
           ))}
         </div>
       </div>
-      
+
       <ExitDialog
         open={showExitDialog}
         onOpenChange={setShowExitDialog}
         onSaveAndExit={handleSaveAndExit}
         onExitWithoutSaving={handleExitWithoutSaving}
       />
-      
+
       {multiplayer && (
         <ShareModal
           open={showShareModal}

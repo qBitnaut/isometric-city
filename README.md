@@ -1,8 +1,6 @@
-# IsoCity
+# Veocity Simulator
 
-Try for free at [iso-city.com](https://iso-city.com)!
-
-IsoCity is a open-source isometric city-building simulation game built with **Next.js**, **TypeScript**, and **Tailwind CSS**. It leverages the HTML5 Canvas API for high-performance rendering of isometric graphics, featuring complex systems for economic simulation, trains, planes, seaplanes, helicopters, cars, pedestrians, and more.
+Veocity Simulator is a open-source isometric city-building simulation game built with **Next.js**, **TypeScript**, and **Tailwind CSS**. It leverages the HTML5 Canvas API for high-performance rendering of isometric graphics, featuring complex systems for economic simulation, trains, planes, seaplanes, helicopters, cars, pedestrians, and more.
 
 ![IsoCity Banner](public/readme-image.png)
 
@@ -63,4 +61,4 @@ Please ensure your code follows the existing style and conventions.
 
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the MIT License. See `LICENSE` for more information. Forked from [isometric-city](https://github.com/amilich/isometric-city).
